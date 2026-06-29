@@ -1,5 +1,7 @@
 # Multi-Agent Code Generator
 
+[![CI](https://github.com/erollqorrolli/multi-agent-codegen/actions/workflows/ci.yml/badge.svg)](https://github.com/erollqorrolli/multi-agent-codegen/actions/workflows/ci.yml)
+
 You open a GitHub issue like *"Build a REST API for expense tracking with auth."*
 A few minutes later, a pull request shows up with working, tested code — written,
 reviewed, and checked by five AI agents that each do one job and hand their work
