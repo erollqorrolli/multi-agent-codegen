@@ -16,7 +16,12 @@ from sqlalchemy.pool import StaticPool
 from app.agents.orchestrator import Orchestrator
 from app.db.models import AgentStep, Base, FeedbackVerdict, PipelineRun, RunStatus
 from app.schemas.pipeline import GenerationRequest
-from app.services.learning import distill_lessons, load_lessons, record_feedback
+from app.services.learning import (
+    distill_lessons,
+    feedback_from_pr,
+    load_lessons,
+    record_feedback,
+)
 from tests.stubs import StubProvider
 
 
@@ -96,3 +101,21 @@ async def test_learning_loop_distills_feedback(session):
     loaded = await load_lessons(session)
     assert "security" in loaded
     assert any("rate-limit" in t.lower() for t in loaded["security"])
+
+
+async def test_feedback_from_closed_pr(session):
+    pr = "https://github.com/o/r/pull/1"
+    run = PipelineRun(issue_title="x", status=RunStatus.SUCCEEDED, pr_url=pr)
+    session.add(run)
+    await session.commit()
+
+    # Merged PR -> accepted; rejected PR distills a lesson.
+    accepted = await feedback_from_pr(session, StubProvider(), pr_url=pr, merged=True)
+    assert accepted.verdict == FeedbackVerdict.ACCEPTED
+
+    rejected = await feedback_from_pr(session, StubProvider(), pr_url=pr, merged=False)
+    assert rejected.verdict == FeedbackVerdict.REJECTED
+    assert "security" in await load_lessons(session)
+
+    # An unknown PR maps to no run.
+    assert await feedback_from_pr(session, StubProvider(), pr_url="x", merged=True) is None

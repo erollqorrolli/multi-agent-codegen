@@ -1,7 +1,8 @@
 """GitHub webhook entrypoint.
 
-Receives `issues` events, verifies the signature, and (for newly opened issues)
-kicks off the pipeline in the background, then opens a PR with the result.
+Verifies the signature, then:
+  * `issues/opened`  -> run the pipeline and open a PR;
+  * `pull_request/closed` -> feed the merge/close back into the learning loop.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from app.db.session import SessionLocal, get_session
 from app.llm import get_llm_provider
 from app.schemas.pipeline import GenerationRequest
 from app.services.github import GitHubClient, verify_signature
+from app.services.learning import feedback_from_pr
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/webhook", tags=["webhook"])
@@ -35,23 +37,40 @@ async def github_webhook(
         raise HTTPException(401, "invalid signature")
 
     payload = await request.json()
+    action = payload.get("action")
 
-    # Only act on newly opened issues (ignore comments, edits, our own PRs, etc.)
-    if x_github_event != "issues" or payload.get("action") != "opened":
-        return {"ignored": True, "event": x_github_event, "action": payload.get("action")}
+    # Issue opened -> generate + open a PR.
+    if x_github_event == "issues" and action == "opened":
+        issue = payload["issue"]
+        req = GenerationRequest(
+            issue_title=issue["title"],
+            issue_body=issue.get("body") or "",
+            repo=payload["repository"]["full_name"],
+            issue_number=issue["number"],
+        )
+        background.add_task(_run_pipeline_and_open_pr, req, payload["installation"]["id"])
+        return {"accepted": True, "repo": req.repo, "issue": issue["number"]}
 
-    issue = payload["issue"]
-    repo = payload["repository"]["full_name"]
-    installation_id = payload["installation"]["id"]
+    # PR closed -> learning loop (merged = accepted, closed = rejected).
+    if x_github_event == "pull_request" and action == "closed":
+        pr = payload["pull_request"]
+        background.add_task(_handle_pr_closed, pr["html_url"], bool(pr.get("merged")))
+        return {"accepted": True, "pr": pr["html_url"], "merged": bool(pr.get("merged"))}
 
-    req = GenerationRequest(
-        issue_title=issue["title"],
-        issue_body=issue.get("body") or "",
-        repo=repo,
-        issue_number=issue["number"],
-    )
-    background.add_task(_run_pipeline_and_open_pr, req, installation_id)
-    return {"accepted": True, "repo": repo, "issue": issue["number"]}
+    return {"ignored": True, "event": x_github_event, "action": action}
+
+
+async def _handle_pr_closed(pr_url: str, merged: bool) -> None:
+    """Background worker: convert a closed PR into learning-loop feedback."""
+    async with SessionLocal() as session:
+        try:
+            fb = await feedback_from_pr(
+                session, get_llm_provider(), pr_url=pr_url, merged=merged
+            )
+            if fb:
+                logger.info("Recorded %s feedback for PR %s", fb.verdict, pr_url)
+        except Exception:
+            logger.exception("Failed to process closed PR %s", pr_url)
 
 
 async def _run_pipeline_and_open_pr(req: GenerationRequest, installation_id: int) -> None:

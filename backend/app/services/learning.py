@@ -62,6 +62,32 @@ async def record_feedback(
     return fb
 
 
+async def feedback_from_pr(
+    session: AsyncSession,
+    provider: LLMProvider,
+    *,
+    pr_url: str,
+    merged: bool,
+    comment: str = "",
+) -> Feedback | None:
+    """Turn a closed PR into feedback for the run that produced it.
+
+    Merged -> ACCEPTED (reinforces lessons); closed unmerged -> REJECTED (distills
+    new ones). Returns None if the PR doesn't map to a known run.
+    """
+    run = (
+        await session.execute(select(PipelineRun).where(PipelineRun.pr_url == pr_url))
+    ).scalar_one_or_none()
+    if run is None:
+        logger.info("feedback_from_pr: no run for PR %s", pr_url)
+        return None
+
+    verdict = FeedbackVerdict.ACCEPTED if merged else FeedbackVerdict.REJECTED
+    fb = await record_feedback(session, run_id=run.id, verdict=verdict, comment=comment)
+    await distill_lessons(session, provider, feedback=fb)
+    return fb
+
+
 async def distill_lessons(
     session: AsyncSession,
     provider: LLMProvider,

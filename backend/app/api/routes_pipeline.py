@@ -13,13 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.agents.orchestrator import Orchestrator
+from app.api.deps import require_api_token
 from app.db.models import FeedbackVerdict, LearnedLesson, PipelineRun
 from app.db.session import get_session
 from app.llm import QuotaExceededError, get_llm_provider
 from app.schemas.pipeline import GenerationRequest, PipelineResult
 from app.services.learning import distill_lessons, record_feedback
 
-router = APIRouter(prefix="/api", tags=["pipeline"])
+router = APIRouter(prefix="/api", tags=["pipeline"], dependencies=[Depends(require_api_token)])
 
 
 @router.post("/pipeline/generate", response_model=PipelineResult)

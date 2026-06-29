@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     github_private_key_path: str = "./github-app-private-key.pem"
 
     # --- App ---
+    # Optional API auth. Empty = open (dev/demo). Set in prod to require a token.
+    api_token: str = ""
     app_env: str = "development"
     log_level: str = "INFO"
     cors_origins: str = "http://localhost:3000"
