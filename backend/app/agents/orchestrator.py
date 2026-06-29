@@ -64,6 +64,9 @@ class Orchestrator:
         self.optimization = OptimizationAgent(provider)
 
         self._seq = 0
+        # Steps tracked locally; we never read the lazy `run.steps` relationship
+        # in this async context (that would trigger sync IO -> MissingGreenlet).
+        self._steps: list[AgentStep] = []
 
     async def run(self, request: GenerationRequest) -> PipelineResult:
         run = PipelineRun(
@@ -128,8 +131,8 @@ class Orchestrator:
                 run, self.implementation, ctx, extra=self._fix_brief(ctx)
             )
 
-        run.total_input_tokens = sum(s.input_tokens or 0 for s in run.steps)
-        run.total_output_tokens = sum(s.output_tokens or 0 for s in run.steps)
+        run.total_input_tokens = sum(s.input_tokens or 0 for s in self._steps)
+        run.total_output_tokens = sum(s.output_tokens or 0 for s in self._steps)
 
         result = PipelineResult(
             run_id=run.id,
@@ -163,7 +166,7 @@ class Orchestrator:
             duration_ms=int((time.perf_counter() - start) * 1000),
         )
         self._session.add(step)
-        run.steps.append(step)
+        self._steps.append(step)
         await self._session.commit()
         logger.info("Run %s sandbox(%s): %s", run.id, result.backend, result.summary)
         return result
@@ -201,7 +204,7 @@ class Orchestrator:
             duration_ms=int((time.perf_counter() - start) * 1000),
         )
         self._session.add(step)
-        run.steps.append(step)
+        self._steps.append(step)
         await self._session.commit()
         return output
 

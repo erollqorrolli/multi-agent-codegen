@@ -40,7 +40,8 @@ class GeminiProvider(LLMProvider):
         api_key: str,
         model_fast: str,
         model_smart: str,
-        default_thinking_budget: int,
+        thinking_budget_fast: int,
+        thinking_budget_smart: int,
     ) -> None:
         if not api_key:
             raise ValueError(
@@ -49,7 +50,10 @@ class GeminiProvider(LLMProvider):
             )
         self._client = genai.Client(api_key=api_key)
         self._models = {ModelTier.FAST: model_fast, ModelTier.SMART: model_smart}
-        self._default_thinking_budget = default_thinking_budget
+        self._thinking_budget = {
+            ModelTier.FAST: thinking_budget_fast,
+            ModelTier.SMART: thinking_budget_smart,
+        }
 
     def _model_for(self, tier: ModelTier) -> str:
         return self._models[tier]
@@ -71,7 +75,7 @@ class GeminiProvider(LLMProvider):
         temperature: float = 0.7,
     ) -> LLMResponse:
         model = self._model_for(tier)
-        budget = self._default_thinking_budget if thinking_budget is None else thinking_budget
+        budget = self._thinking_budget[tier] if thinking_budget is None else thinking_budget
 
         config = types.GenerateContentConfig(
             system_instruction=system,

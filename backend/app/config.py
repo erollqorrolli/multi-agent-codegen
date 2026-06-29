@@ -21,9 +21,13 @@ class Settings(BaseSettings):
     # --- LLM ---
     llm_provider: str = "gemini"
     gemini_api_key: str = ""
+    # Both default to Flash because the free tier does NOT include 2.5 Pro
+    # (quota is 0). With a paid plan you can set GEMINI_MODEL_SMART=gemini-2.5-pro.
+    # The smart tier still reasons harder via a larger thinking budget.
     gemini_model_fast: str = "gemini-2.5-flash"
-    gemini_model_smart: str = "gemini-2.5-pro"
-    llm_thinking_budget: int = 2048
+    gemini_model_smart: str = "gemini-2.5-flash"
+    llm_thinking_budget: int = 1024
+    llm_thinking_budget_smart: int = 4096
 
     # --- Sandbox (test execution) ---
     sandbox_enabled: bool = True
