@@ -6,7 +6,11 @@ the dashboard, and submit accept/reject feedback that feeds the learning loop.
 
 from __future__ import annotations
 
+import asyncio
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,8 +18,8 @@ from sqlalchemy.orm import selectinload
 
 from app.agents.orchestrator import Orchestrator
 from app.api.deps import require_api_token
-from app.db.models import FeedbackVerdict, LearnedLesson, PipelineRun
-from app.db.session import get_session
+from app.db.models import AgentStep, FeedbackVerdict, LearnedLesson, PipelineRun, RunStatus
+from app.db.session import SessionLocal, get_session
 from app.llm import QuotaExceededError, get_llm_provider
 from app.schemas.pipeline import GenerationRequest, PipelineResult
 from app.services.learning import distill_lessons, record_feedback
@@ -55,6 +59,53 @@ async def list_runs(session: AsyncSession = Depends(get_session)) -> list[dict]:
         }
         for r in rows
     ]
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+@router.get("/runs/{run_id}/events")
+async def run_events(run_id: str) -> StreamingResponse:
+    """Server-Sent Events: stream each agent step as it lands, then `done`.
+
+    Works for an in-progress run (live) or a finished one (replays its steps).
+    Uses a fresh session per poll so it sees the pipeline's committed writes.
+    """
+
+    async def stream():
+        last_seq = 0
+        for _ in range(900):  # safety cap (~15 min at 1s polls)
+            async with SessionLocal() as session:
+                run = await session.get(PipelineRun, run_id)
+                if run is None:
+                    yield _sse("error", {"detail": "run not found"})
+                    return
+                new_steps = (
+                    await session.execute(
+                        select(AgentStep)
+                        .where(AgentStep.run_id == run_id, AgentStep.sequence > last_seq)
+                        .order_by(AgentStep.sequence)
+                    )
+                ).scalars().all()
+                for s in new_steps:
+                    last_seq = s.sequence
+                    yield _sse(
+                        "step",
+                        {
+                            "sequence": s.sequence,
+                            "agent": s.agent,
+                            "model": s.model,
+                            "duration_ms": s.duration_ms,
+                            "output": s.output,
+                        },
+                    )
+                if run.status in (RunStatus.SUCCEEDED, RunStatus.FAILED):
+                    yield _sse("done", {"status": run.status, "pr_url": run.pr_url})
+                    return
+            await asyncio.sleep(1)
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
 
 
 @router.get("/runs/{run_id}")

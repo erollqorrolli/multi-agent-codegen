@@ -19,7 +19,30 @@ export function RunDetail({ runId, onChanged }: { runId: string; onChanged: () =
   const [sent, setSent] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getRun(runId).then(setDetail).catch(() => setDetail(null));
+    let es: EventSource | null = null;
+    api
+      .getRun(runId)
+      .then((d) => {
+        setDetail(d);
+        // For an in-progress run, stream steps live via Server-Sent Events.
+        if (d.status === "running" || d.status === "pending") {
+          const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+          es = new EventSource(`${base}/api/runs/${runId}/events`);
+          es.addEventListener("step", (e) => {
+            const s = JSON.parse((e as MessageEvent).data);
+            setDetail((prev) => {
+              if (!prev || prev.steps.some((x) => x.sequence === s.sequence)) return prev;
+              return { ...prev, steps: [...prev.steps, { ...s, input_tokens: null, output_tokens: null }] };
+            });
+          });
+          es.addEventListener("done", () => {
+            es?.close();
+            api.getRun(runId).then(setDetail).catch(() => {});
+          });
+        }
+      })
+      .catch(() => setDetail(null));
+    return () => es?.close();
   }, [runId]);
 
   if (!detail) return <div className="detail muted">Loading run</div>;
