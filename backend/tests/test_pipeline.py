@@ -52,7 +52,7 @@ async def test_pipeline_happy_path(session):
     # The sandbox actually executed the generated tests and they passed.
     assert result.test_execution is not None
     assert result.test_execution["ran"] is True
-    assert result.test_execution["passed"] is True
+    assert result.test_execution["passed"] is True, result.test_execution.get("output")
 
     # Steps were persisted: architect, implementation, test, security, optimization, sandbox.
     run = await session.get(PipelineRun, result.run_id)
