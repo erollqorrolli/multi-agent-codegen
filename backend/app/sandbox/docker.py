@@ -22,6 +22,7 @@ from pathlib import Path
 from app.sandbox.base import (
     SandboxResult,
     detect_framework,
+    ensure_pytest_config,
     parse_pytest,
     truncate,
     write_files,
@@ -51,6 +52,7 @@ class DockerSandbox:
         with tempfile.TemporaryDirectory(prefix="codegen-sbx-") as tmp:
             root = Path(tmp)
             write_files(root, files)
+            ensure_pytest_config(root, files)
 
             # Install deps (needs network) then run tests with network disabled.
             script = (

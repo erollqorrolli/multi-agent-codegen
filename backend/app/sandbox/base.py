@@ -65,6 +65,22 @@ def write_files(root: Path, files: list[GeneratedFile]) -> None:
         target.write_text(f.content)
 
 
+_PYTEST_CONFIG_NAMES = {"pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml"}
+
+
+def ensure_pytest_config(root: Path, files: list[GeneratedFile]) -> None:
+    """Anchor pytest config inside the sandbox.
+
+    Without this, pytest walks *up* the filesystem looking for a config file and
+    can crash on (or be polluted by) a foreign one outside the sandbox — which is
+    exactly what differs between a dev machine and a CI runner. A local pytest.ini
+    pins rootdir to the sandbox and enables asyncio mode for generated async tests.
+    """
+    if any(Path(f.path).name in _PYTEST_CONFIG_NAMES for f in files):
+        return  # the generated project brought its own config
+    (root / "pytest.ini").write_text("[pytest]\nasyncio_mode = auto\n")
+
+
 def detect_framework(files: list[GeneratedFile]) -> str:
     """Best-effort framework detection from the file set."""
     paths = [f.path for f in files]

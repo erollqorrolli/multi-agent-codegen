@@ -19,6 +19,7 @@ from pathlib import Path
 from app.sandbox.base import (
     SandboxResult,
     detect_framework,
+    ensure_pytest_config,
     parse_pytest,
     truncate,
     write_files,
@@ -47,6 +48,7 @@ class LocalSandbox:
         with tempfile.TemporaryDirectory(prefix="codegen-sbx-") as tmp:
             root = Path(tmp)
             write_files(root, files)
+            ensure_pytest_config(root, files)
 
             python = sys.executable
             logs: list[str] = []
@@ -68,7 +70,11 @@ class LocalSandbox:
                 )
                 logs.append(f"$ pip install -r requirements.txt (exit {code})\n{out}")
 
-            code, out = await self._exec([python, "-m", "pytest", "-q"], root)
+            # --rootdir + no:cacheprovider keep the run hermetic and side-effect free.
+            code, out = await self._exec(
+                [python, "-m", "pytest", "-q", "-p", "no:cacheprovider", "--rootdir", str(root)],
+                root,
+            )
             logs.append(f"$ pytest -q (exit {code})\n{out}")
 
             parsed = parse_pytest(out, code)
