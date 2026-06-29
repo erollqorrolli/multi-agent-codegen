@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.agents.orchestrator import Orchestrator
 from app.db.models import FeedbackVerdict, LearnedLesson, PipelineRun
@@ -53,7 +54,15 @@ async def list_runs(session: AsyncSession = Depends(get_session)) -> list[dict]:
 
 @router.get("/runs/{run_id}")
 async def get_run(run_id: str, session: AsyncSession = Depends(get_session)) -> dict:
-    run = await session.get(PipelineRun, run_id)
+    # Eager-load steps: accessing the lazy relationship after the await would
+    # emit IO outside the async greenlet and raise MissingGreenlet.
+    run = (
+        await session.execute(
+            select(PipelineRun)
+            .options(selectinload(PipelineRun.steps))
+            .where(PipelineRun.id == run_id)
+        )
+    ).scalar_one_or_none()
     if run is None:
         raise HTTPException(404, "run not found")
     return {

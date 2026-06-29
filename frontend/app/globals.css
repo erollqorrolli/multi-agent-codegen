@@ -59,3 +59,23 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .agent-chip { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 6px;
   background: #0d111a; border: 1px solid var(--border); margin: 2px 4px 2px 0; }
+
+.clickable { cursor: pointer; }
+.clickable:hover { background: rgba(110,168,254,.04); }
+.caret { color: var(--muted); font-size: 12px; }
+
+/* Run detail */
+.detail { padding: 8px 0 14px 28px; border-bottom: 1px solid var(--border); }
+.timeline { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
+.step { display: flex; gap: 12px; padding: 8px 0; border-left: 2px solid var(--border); padding-left: 14px; margin-left: 6px; }
+.step-icon { font-size: 16px; width: 22px; text-align: center; }
+.step-body { flex: 1; }
+.step-head { display: flex; align-items: center; gap: 10px; }
+.step-head strong { text-transform: capitalize; }
+.step-meta { display: flex; gap: 14px; font-size: 12px; margin-top: 2px; }
+.files { font-size: 13px; margin: 6px 0 14px; }
+
+.feedback-bar { display: flex; gap: 8px; align-items: center; }
+.feedback-bar input { margin: 0; flex: 1; }
+.ok-btn { background: var(--ok); color: #04210d; }
+.err-btn { background: var(--err); color: #2b0606; }

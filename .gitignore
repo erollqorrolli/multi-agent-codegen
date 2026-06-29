@@ -23,7 +23,11 @@ yarn-error.log*
 
 # DB / data
 *.sqlite3
+*.db
 postgres-data/
+
+# Local editor / tooling config (machine-specific)
+.claude/
 
 # OS / editors
 .DS_Store

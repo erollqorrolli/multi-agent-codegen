@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Lesson, type RunSummary } from "@/lib/api";
+import { RunDetail } from "@/components/RunDetail";
 
 const AGENTS = ["architect", "implementation", "test", "security", "optimization"];
 
@@ -12,6 +13,7 @@ export default function Dashboard() {
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -28,6 +30,21 @@ export default function Dashboard() {
     const id = setInterval(refresh, 4000); // poll while runs are in flight
     return () => clearInterval(id);
   }, [refresh]);
+
+  // Deep-link support: #<run-id> (or #first) opens that run on load. Applied once
+  // so it never fights the user's own expand/collapse.
+  const hashApplied = useRef(false);
+  useEffect(() => {
+    if (hashApplied.current || runs.length === 0) return;
+    const hash = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+    if (hash === "first") {
+      setExpanded(runs[0].id);
+      hashApplied.current = true;
+    } else if (runs.some((r) => r.id === hash)) {
+      setExpanded(hash);
+      hashApplied.current = true;
+    }
+  }, [runs]);
 
   const submit = async () => {
     setBusy(true);
@@ -101,22 +118,30 @@ export default function Dashboard() {
         <h2>Runs ({runs.length})</h2>
         {runs.length === 0 && <p className="muted">No runs yet.</p>}
         {runs.map((r) => (
-          <div className="row" key={r.id}>
-            <div>
-              <div>{r.issue_title}</div>
-              <div className="muted">
-                {r.repo ?? "local"} · {r.total_input_tokens + r.total_output_tokens} tokens ·{" "}
-                {new Date(r.created_at).toLocaleString()}
+          <div key={r.id}>
+            <div
+              className="row clickable"
+              onClick={() => setExpanded(expanded === r.id ? null : r.id)}
+            >
+              <div>
+                <div>
+                  <span className="caret">{expanded === r.id ? "▾" : "▸"}</span> {r.issue_title}
+                </div>
+                <div className="muted">
+                  {r.repo ?? "local"} · {(r.total_input_tokens + r.total_output_tokens).toLocaleString()}{" "}
+                  tokens · {new Date(r.created_at).toLocaleString()}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                {r.pr_url && (
+                  <a href={r.pr_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                    PR ↗
+                  </a>
+                )}
+                <span className={`badge ${r.status}`}>{r.status}</span>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-              {r.pr_url && (
-                <a href={r.pr_url} target="_blank" rel="noreferrer">
-                  PR ↗
-                </a>
-              )}
-              <span className={`badge ${r.status}`}>{r.status}</span>
-            </div>
+            {expanded === r.id && <RunDetail runId={r.id} onChanged={refresh} />}
           </div>
         ))}
       </section>

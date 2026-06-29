@@ -51,6 +51,27 @@ issue ──> Architect ──> Implementation ──> [ Test · Security · Opt
                                                       you accept/reject ──> it learns
 ```
 
+## The dashboard
+
+A web dashboard to watch it work: file an issue, follow each agent step by step
+(with the model used, time taken, and tokens spent), see the real test results
+from the sandbox, and accept or reject the result — which is what feeds the
+learning loop.
+
+![Dashboard](docs/dashboard.png)
+
+You can try the dashboard with realistic demo data and **no API key** — it ships
+with a seed script:
+
+```bash
+cd backend && source .venv/bin/activate
+export DATABASE_URL="sqlite+aiosqlite:///./demo.db"
+python -m app.seed                 # loads example runs, steps, and lessons
+uvicorn app.main:app               # API at http://localhost:8000
+
+cd ../frontend && npm install && npm run dev   # dashboard at http://localhost:3000
+```
+
 ## Tech stack
 
 | Part        | Choice                                              |
