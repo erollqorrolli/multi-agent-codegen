@@ -58,8 +58,8 @@ class DockerSandbox:
             script = (
                 "set -e; "
                 "if [ -f requirements.txt ]; then pip install -q -r requirements.txt; fi; "
-                "pip install -q pytest; "
-                "pytest -q"
+                "pip install -q pytest pytest-asyncio; "
+                "pytest -q -p no:cacheprovider --rootdir /work -o cache_dir=/tmp/.pytest_cache"
             )
             cmd = [
                 "docker", "run", "--rm",
