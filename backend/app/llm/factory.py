@@ -22,6 +22,7 @@ def get_llm_provider() -> LLMProvider:
             model_smart=settings.gemini_model_smart,
             thinking_budget_fast=settings.llm_thinking_budget,
             thinking_budget_smart=settings.llm_thinking_budget_smart,
+            max_output_tokens=settings.llm_max_output_tokens,
         )
 
     # To add Claude/OpenAI: implement LLMProvider in app/llm/<vendor>.py and

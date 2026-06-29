@@ -20,11 +20,15 @@ class ArchitectAgent(BaseAgent[ArchitectOutput]):
 
     def system_prompt(self) -> str:
         return (
-            "You are a Principal Software Architect. Given a feature request, design a "
-            "complete, pragmatic system. Choose a sensible, conventional tech stack "
-            "(prefer boring, well-supported tools). Define the data model, the API "
-            "surface, and the major components. Be concrete and implementable — a junior "
-            "engineer should be able to build from your design without further questions."
+            "You are a Principal Software Architect. Design a complete, pragmatic system "
+            "using THIS FIXED STACK — do not choose another language or framework:\n"
+            "  - Python 3.12, FastAPI (async)\n"
+            "  - SQLAlchemy 2.0 (async) for the data layer; Pydantic v2 for schemas\n"
+            "  - JWT auth where authentication is needed; bcrypt/passlib for passwords\n"
+            "  - pytest for tests, runnable against SQLite (no external services)\n"
+            "Define the data model (as SQLAlchemy models or SQL), the API surface, and the "
+            "major components. Be concrete and implementable — a junior engineer should be "
+            "able to build from your design without further questions."
         )
 
     def build_task(self, ctx: PipelineContext) -> str:

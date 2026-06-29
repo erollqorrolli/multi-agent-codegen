@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     gemini_model_smart: str = "gemini-2.5-flash"
     llm_thinking_budget: int = 1024
     llm_thinking_budget_smart: int = 4096
+    # Generated projects are large; a low cap truncates the JSON mid-file.
+    llm_max_output_tokens: int = 32768
 
     # --- Sandbox (test execution) ---
     sandbox_enabled: bool = True

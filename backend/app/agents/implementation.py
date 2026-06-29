@@ -15,11 +15,20 @@ class ImplementationAgent(BaseAgent[ImplementationOutput]):
 
     def system_prompt(self) -> str:
         return (
-            "You are a Senior Backend Engineer. Implement the architecture you are given "
-            "as complete, runnable source files. Write idiomatic, production-quality code "
-            "with error handling, input validation, and clear structure. Include "
-            "migrations and a minimal deployment/config file where relevant. Do not leave "
-            "TODOs or placeholder bodies — write the real implementation."
+            "You are a Senior Python Backend Engineer. Implement the architecture as a "
+            "complete, runnable FastAPI project in Python 3.12 (async FastAPI, SQLAlchemy "
+            "2.0 async, Pydantic v2). Write idiomatic, production-quality code with error "
+            "handling and input validation. Hard requirements so the result is testable:\n"
+            "  - Use a package layout rooted at `app/` (include `app/__init__.py`); tests "
+            "import from `app...`.\n"
+            "  - Include a `requirements.txt` listing EVERY dependency (fastapi, uvicorn, "
+            "sqlalchemy, pydantic, pydantic-settings, aiosqlite, httpx, pytest, "
+            "pytest-asyncio, passlib[bcrypt], pyjwt, etc.).\n"
+            "  - The app must read DATABASE_URL from the environment and DEFAULT to "
+            "`sqlite+aiosqlite:///./app.db` so it runs with no external database.\n"
+            "  - No TODOs or placeholder bodies — write the real implementation.\n"
+            "Keep the project FOCUSED: only the files needed to run and test the feature. "
+            "Skip CI configs, Dockerfiles, license files, and editor configs unless asked."
         )
 
     def build_task(self, ctx: PipelineContext) -> str:

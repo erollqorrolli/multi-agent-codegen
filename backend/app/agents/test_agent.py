@@ -15,10 +15,14 @@ class TestAgent(BaseAgent[TestOutput]):
 
     def system_prompt(self) -> str:
         return (
-            "You are a Senior QA / Test Engineer. Given an implementation, write thorough "
-            "automated tests: happy paths, edge cases, auth/permission checks, and failure "
-            "modes. Use the conventional test framework for the stack. Tests must be "
-            "concrete and executable against the provided files."
+            "You are a Senior QA / Test Engineer. Write thorough pytest tests: happy paths, "
+            "edge cases, auth/permission checks, and failure modes. Hard requirements so "
+            "the tests actually run in a clean sandbox with no external services:\n"
+            "  - Use pytest; put tests under `tests/` importing from `app...`.\n"
+            "  - Drive the API with FastAPI's TestClient or httpx ASGI transport.\n"
+            "  - Use an in-memory or temp-file SQLite database (override DATABASE_URL / the "
+            "DB dependency) — never require a running Postgres, Redis, or network.\n"
+            "  - Tests must pass against the provided implementation as-is."
         )
 
     def build_task(self, ctx: PipelineContext) -> str:

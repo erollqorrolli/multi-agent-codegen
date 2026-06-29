@@ -42,6 +42,7 @@ class GeminiProvider(LLMProvider):
         model_smart: str,
         thinking_budget_fast: int,
         thinking_budget_smart: int,
+        max_output_tokens: int = 32768,
     ) -> None:
         if not api_key:
             raise ValueError(
@@ -54,6 +55,7 @@ class GeminiProvider(LLMProvider):
             ModelTier.FAST: thinking_budget_fast,
             ModelTier.SMART: thinking_budget_smart,
         }
+        self._max_output_tokens = max_output_tokens
 
     def _model_for(self, tier: ModelTier) -> str:
         return self._models[tier]
@@ -80,6 +82,7 @@ class GeminiProvider(LLMProvider):
         config = types.GenerateContentConfig(
             system_instruction=system,
             temperature=temperature,
+            max_output_tokens=self._max_output_tokens,
             response_mime_type="application/json" if json_output else "text/plain",
             thinking_config=types.ThinkingConfig(thinking_budget=budget),
         )

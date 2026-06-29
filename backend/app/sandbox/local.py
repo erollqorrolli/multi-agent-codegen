@@ -51,11 +51,20 @@ class LocalSandbox:
             python = sys.executable
             logs: list[str] = []
 
-            # Optionally install a generated requirements.txt into the active env.
+            # If the project ships dependencies, build a throwaway virtualenv and
+            # install into THAT — never into our own interpreter. This isolates the
+            # untrusted generated code's deps and lets its tests import real packages.
             req = root / "requirements.txt"
             if self._install_deps and req.exists():
+                venv_dir = root / ".sbxvenv"
+                code, out = await self._exec([sys.executable, "-m", "venv", str(venv_dir)], root)
+                logs.append(f"$ python -m venv .sbxvenv (exit {code})")
+                python = str(venv_dir / "bin" / "python")
                 code, out = await self._exec(
-                    [python, "-m", "pip", "install", "-q", "-r", str(req)], root
+                    [python, "-m", "pip", "install", "-q", "-r", "requirements.txt",
+                     "pytest", "pytest-asyncio"],
+                    root,
+                    timeout=max(self._timeout, 360),
                 )
                 logs.append(f"$ pip install -r requirements.txt (exit {code})\n{out}")
 
@@ -79,7 +88,8 @@ class LocalSandbox:
                 output=combined,
             )
 
-    async def _exec(self, cmd: list[str], cwd: Path) -> tuple[int, str]:
+    async def _exec(self, cmd: list[str], cwd: Path, *, timeout: int | None = None) -> tuple[int, str]:
+        limit = timeout or self._timeout
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=str(cwd),
@@ -87,11 +97,11 @@ class LocalSandbox:
             stderr=asyncio.subprocess.STDOUT,
         )
         try:
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=self._timeout)
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=limit)
         except asyncio.TimeoutError:
             proc.kill()
             await proc.wait()
-            return 124, f"TIMEOUT after {self._timeout}s"
+            return 124, f"TIMEOUT after {limit}s"
         return proc.returncode or 0, stdout.decode(errors="replace")
 
 
