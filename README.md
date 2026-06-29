@@ -90,18 +90,25 @@ OpenAI, or a local model means writing one file — no other code changes.
 
 It's a work in progress. Being honest about what's real:
 
-**Done and tested**
-- The full backend: all five agents, the coordinator, the database, and the API.
-- The sandbox that actually runs generated tests and feeds failures back into
-  the fix loop (verified against both passing and failing test suites).
-- The GitHub App code for receiving issues and opening pull requests.
-- A starter version of the dashboard.
+**Done and verified**
+- The full pipeline runs end-to-end on real Gemini: all five agents coordinate,
+  the fix loop repairs failing code, and it produces a complete project. A real
+  run generated a working FastAPI app, real security findings, and optimizations.
+- The sandbox actually runs the generated tests in an isolated virtualenv and
+  feeds real pass/fail back into the fix loop.
+- A deterministic test suite drives the **whole pipeline with no API key** (a stub
+  model), covering the happy path, the fix loop, and the learning loop.
+- The learning loop: PR feedback distills into reusable rules, and closed PRs feed
+  back automatically (merged = accepted, closed = rejected).
+- Optional API-token auth, async Alembic migrations, and graceful quota handling.
+- The monitoring dashboard (dark, with run timelines and feedback).
 
 **Not done yet**
-- A polished, fully built-out dashboard.
-- Live progress streaming (the dashboard currently refreshes on a timer).
-- Login/auth on the API.
-- Automatic deployment.
+- One fully-green generated test run (the last run found a real bug in the AI's
+  own code; the improved fix loop should close it — pending free-tier quota).
+- Live progress streaming (the dashboard refreshes on a timer for now).
+- The GitHub issue→PR flow tested against a real repo (code is in place).
+- Deployment.
 
 The roadmap at the bottom has the full list.
 
@@ -151,9 +158,11 @@ Step-by-step instructions are in [docs/github-app.md](docs/github-app.md).
 cd backend && source .venv/bin/activate && pytest
 ```
 
-These run without an API key, database, or internet. They cover the parts that
-hold everything together, including proof that the test sandbox correctly tells a
-passing suite from a failing one.
+These run without an API key, database, or internet. A stub model drives the
+**entire pipeline** — so the tests prove the agents coordinate, the fix loop
+repairs failing code, the sandbox tells a passing suite from a failing one, and
+the learning loop distills feedback. (Writing these caught two real bugs: an async
+session being committed concurrently, and a lazy-load outside the async context.)
 
 ## Project layout
 
@@ -173,17 +182,19 @@ docs/         setup guides
 
 ## Roadmap
 
-In rough priority order:
+Done recently: ~~auto-feedback on closed PRs~~, ~~optional API auth~~,
+~~database migrations~~, ~~full-pipeline tests~~, ~~graceful quota handling~~.
 
-1. Build out the dashboard and add live progress streaming.
-2. Run the test sandbox inside CI and harden the Docker setup.
-3. Close the loop automatically when a real PR is merged or closed.
-4. Pick only the *relevant* learned rules per request (using embeddings) instead
+Still ahead, in rough priority order:
+
+1. Add live progress streaming to the dashboard (it polls for now).
+2. Verify the GitHub issue→PR flow against a real repo.
+3. Pick only the *relevant* learned rules per request (using embeddings) instead
    of the top few.
-5. Add login/auth and database migrations.
-6. Add a scoring harness to measure whether the learning loop actually improves
+4. A scoring harness to measure whether the learning loop actually improves
    results over time.
-7. Deploy it.
+5. Run the sandbox in CI; harden the Docker setup.
+6. Deploy it.
 
 ## License
 
