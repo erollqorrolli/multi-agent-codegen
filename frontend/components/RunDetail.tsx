@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import { api, type RunDetail as RunDetailData } from "@/lib/api";
 
-const AGENT_ICON: Record<string, string> = {
-  architect: "🏛",
-  implementation: "⌨️",
-  test: "🧪",
-  security: "🔒",
-  optimization: "⚡",
-  sandbox: "📦",
+// Monospace code + colour tone per agent (no icons).
+const AGENT: Record<string, { code: string; tone: string }> = {
+  architect: { code: "ARC", tone: "navy" },
+  implementation: { code: "IMP", tone: "blue" },
+  test: { code: "TST", tone: "blue" },
+  security: { code: "SEC", tone: "red" },
+  optimization: { code: "OPT", tone: "red" },
+  sandbox: { code: "BOX", tone: "navy" },
 };
 
 export function RunDetail({ runId, onChanged }: { runId: string; onChanged: () => void }) {
@@ -21,35 +22,39 @@ export function RunDetail({ runId, onChanged }: { runId: string; onChanged: () =
     api.getRun(runId).then(setDetail).catch(() => setDetail(null));
   }, [runId]);
 
-  if (!detail) return <div className="muted detail">Loading run…</div>;
+  if (!detail) return <div className="detail muted">Loading run</div>;
 
   const sendFeedback = async (verdict: string) => {
     await api.feedback(runId, verdict, comment);
     setSent(verdict);
-    onChanged(); // refresh lessons in the parent
+    onChanged();
   };
+
+  const files = Object.keys(detail.generated_files ?? {});
 
   return (
     <div className="detail">
       <div className="timeline">
         {detail.steps.map((s) => {
+          const meta = AGENT[s.agent] ?? { code: s.agent.slice(0, 3).toUpperCase(), tone: "navy" };
+          const out = s.output as { ran?: boolean; passed?: boolean; summary?: string };
           const sandbox = s.agent === "sandbox";
-          const passed = sandbox && (s.output as { passed?: boolean }).passed;
-          const failed = sandbox && (s.output as { ran?: boolean; passed?: boolean }).ran && !passed;
+          const passed = sandbox && out.passed;
+          const failed = sandbox && out.ran && !out.passed;
           return (
             <div className="step" key={s.sequence}>
-              <span className="step-icon">{AGENT_ICON[s.agent] ?? "•"}</span>
+              <span className={`tag tag-${meta.tone}`}>{meta.code}</span>
               <div className="step-body">
                 <div className="step-head">
                   <strong>{s.agent}</strong>
-                  <span className="muted">{s.model}</span>
-                  {sandbox && (
+                  <span className="step-model">{s.model}</span>
+                  {sandbox && out.summary && (
                     <span className={`badge ${passed ? "succeeded" : failed ? "failed" : "pending"}`}>
-                      {(s.output as { summary?: string }).summary ?? "ran"}
+                      {out.summary}
                     </span>
                   )}
                 </div>
-                <div className="muted step-meta">
+                <div className="step-meta">
                   {s.duration_ms != null && <span>{(s.duration_ms / 1000).toFixed(1)}s</span>}
                   {s.input_tokens != null && (
                     <span>{(s.input_tokens + (s.output_tokens ?? 0)).toLocaleString()} tokens</span>
@@ -61,27 +66,32 @@ export function RunDetail({ runId, onChanged }: { runId: string; onChanged: () =
         })}
       </div>
 
-      <div className="files muted">
-        {Object.keys(detail.generated_files ?? {}).length} generated file(s):{" "}
-        {Object.keys(detail.generated_files ?? {}).slice(0, 6).join(", ") || "—"}
+      <div className="files">
+        {files.length} generated file{files.length === 1 ? "" : "s"}
+        {files.length > 0 && (
+          <>
+            {": "}
+            <code>{files.slice(0, 6).join("  ")}</code>
+          </>
+        )}
       </div>
 
       <div className="feedback-bar">
         {sent ? (
           <span className="muted">
-            Feedback recorded ({sent}). The system distilled any lessons from it.
+            Feedback recorded ({sent}). Any lessons from it were distilled for next time.
           </span>
         ) : (
           <>
             <input
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              placeholder="Optional: why? (teaches the agents)"
+              placeholder="Optional: what was wrong or right? (this trains the agents)"
             />
-            <button className="ok-btn" onClick={() => sendFeedback("accepted")}>
+            <button className="btn-navy" onClick={() => sendFeedback("accepted")}>
               Accept
             </button>
-            <button className="err-btn" onClick={() => sendFeedback("rejected")}>
+            <button className="btn-ghost" onClick={() => sendFeedback("rejected")}>
               Reject
             </button>
           </>

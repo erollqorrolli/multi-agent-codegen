@@ -20,19 +20,19 @@ export default function Dashboard() {
       const [r, l] = await Promise.all([api.listRuns(), api.listLessons()]);
       setRuns(r);
       setLessons(l);
+      setError(null);
     } catch (e) {
-      setError(`Backend unreachable — is it running on :8000? (${(e as Error).message})`);
+      setError(`Cannot reach the API on :8000 — is the backend running? (${(e as Error).message})`);
     }
   }, []);
 
   useEffect(() => {
     refresh();
-    const id = setInterval(refresh, 4000); // poll while runs are in flight
+    const id = setInterval(refresh, 4000);
     return () => clearInterval(id);
   }, [refresh]);
 
-  // Deep-link support: #<run-id> (or #first) opens that run on load. Applied once
-  // so it never fights the user's own expand/collapse.
+  // Deep-link: #<run-id> (or #first) opens that run once on load.
   const hashApplied = useRef(false);
   useEffect(() => {
     if (hashApplied.current || runs.length === 0) return;
@@ -60,91 +60,103 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="container">
-      <header style={{ marginBottom: 24 }}>
-        <h1>🤖 Multi-Agent Code Generator</h1>
-        <p className="muted">
-          architect → implementation → test · security · optimization → PR, with a learning loop
-        </p>
+    <>
+      <header className="masthead">
+        <div className="masthead-inner">
+          <div className="wordmark">Multi-Agent Code Generator</div>
+          <div className="tagline">
+            From a GitHub issue to a tested pull request — designed, written, tested, audited, and
+            tuned by five coordinated agents, improving from your feedback.
+          </div>
+        </div>
       </header>
 
-      {error && (
-        <div className="panel" style={{ borderColor: "var(--err)", marginBottom: 20 }}>
-          <span style={{ color: "var(--err)" }}>{error}</span>
+      <main className="container">
+        {error && <div className="notice">{error}</div>}
+
+        <div className="grid">
+          <section className="panel">
+            <h2>File an issue</h2>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Issue title"
+            />
+            <textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="Requirements or acceptance criteria (optional)"
+              rows={4}
+            />
+            <button onClick={submit} disabled={busy || !title.trim()}>
+              {busy ? "Running pipeline" : "Generate"}
+            </button>
+            <p className="muted" style={{ marginTop: 12 }}>
+              Runs the full pipeline and returns a result. On the free Gemini tier this takes a
+              little time.
+            </p>
+          </section>
+
+          <section className="panel">
+            <h2>Learned lessons / {lessons.length}</h2>
+            {lessons.length === 0 && (
+              <p className="muted">None yet. Rejecting a result teaches the agents.</p>
+            )}
+            {AGENTS.map((agent) => {
+              const items = lessons.filter((l) => l.agent === agent);
+              if (!items.length) return null;
+              return (
+                <div key={agent} className="lesson-group">
+                  <span className="agent-chip">{agent}</span>
+                  <ul className="lesson-list">
+                    {items.map((l, i) => (
+                      <li key={i}>
+                        {l.lesson}{" "}
+                        <span className="lesson-weight">
+                          [×{l.times_applied} · w {l.weight.toFixed(1)}]
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </section>
         </div>
-      )}
 
-      <div className="grid">
-        <section className="panel">
-          <h2>File an issue</h2>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Issue title" />
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Requirements / acceptance criteria (optional)"
-            rows={4}
-          />
-          <button onClick={submit} disabled={busy || !title.trim()}>
-            {busy ? "Running 5 agents…" : "Generate"}
-          </button>
-          <p className="muted" style={{ marginTop: 10 }}>
-            Runs the full pipeline synchronously. Free-tier Gemini — give it a moment.
-          </p>
-        </section>
-
-        <section className="panel">
-          <h2>Learned lessons ({lessons.length})</h2>
-          {lessons.length === 0 && <p className="muted">None yet — reject a PR to teach the system.</p>}
-          {AGENTS.map((agent) => {
-            const items = lessons.filter((l) => l.agent === agent);
-            if (!items.length) return null;
-            return (
-              <div key={agent} style={{ marginBottom: 12 }}>
-                <span className="agent-chip">{agent}</span>
-                <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
-                  {items.map((l, i) => (
-                    <li key={i} className="muted" style={{ marginBottom: 4 }}>
-                      {l.lesson} <em>(×{l.times_applied}, w={l.weight.toFixed(1)})</em>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </section>
-      </div>
-
-      <section className="panel" style={{ marginTop: 20 }}>
-        <h2>Runs ({runs.length})</h2>
-        {runs.length === 0 && <p className="muted">No runs yet.</p>}
-        {runs.map((r) => (
-          <div key={r.id}>
-            <div
-              className="row clickable"
-              onClick={() => setExpanded(expanded === r.id ? null : r.id)}
-            >
-              <div>
+        <section className="panel" style={{ marginTop: 18 }}>
+          <h2>Runs / {runs.length}</h2>
+          {runs.length === 0 && <p className="muted">No runs yet.</p>}
+          {runs.map((r) => (
+            <div key={r.id}>
+              <div
+                className="row clickable"
+                onClick={() => setExpanded(expanded === r.id ? null : r.id)}
+              >
                 <div>
-                  <span className="caret">{expanded === r.id ? "▾" : "▸"}</span> {r.issue_title}
+                  <div>
+                    <span className="caret">{expanded === r.id ? "–" : "+"}</span>
+                    {r.issue_title}
+                  </div>
+                  <div className="muted mono" style={{ fontSize: 12, marginTop: 2 }}>
+                    {r.repo ?? "local"} · {(r.total_input_tokens + r.total_output_tokens).toLocaleString()}{" "}
+                    tokens · {new Date(r.created_at).toLocaleString()}
+                  </div>
                 </div>
-                <div className="muted">
-                  {r.repo ?? "local"} · {(r.total_input_tokens + r.total_output_tokens).toLocaleString()}{" "}
-                  tokens · {new Date(r.created_at).toLocaleString()}
+                <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                  {r.pr_url && (
+                    <a href={r.pr_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                      View PR
+                    </a>
+                  )}
+                  <span className={`badge ${r.status}`}>{r.status}</span>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                {r.pr_url && (
-                  <a href={r.pr_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
-                    PR ↗
-                  </a>
-                )}
-                <span className={`badge ${r.status}`}>{r.status}</span>
-              </div>
+              {expanded === r.id && <RunDetail runId={r.id} onChanged={refresh} />}
             </div>
-            {expanded === r.id && <RunDetail runId={r.id} onChanged={refresh} />}
-          </div>
-        ))}
-      </section>
-    </div>
+          ))}
+        </section>
+      </main>
+    </>
   );
 }
