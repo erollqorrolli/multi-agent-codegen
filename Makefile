@@ -26,6 +26,9 @@ frontend:
 test:
 	cd backend && . .venv/bin/activate && pytest -q
 
+migrate:
+	cd backend && . .venv/bin/activate && alembic upgrade head
+
 demo:
 	cd backend && . .venv/bin/activate && python -m app.cli "$(TITLE)" "$(BODY)"
 
