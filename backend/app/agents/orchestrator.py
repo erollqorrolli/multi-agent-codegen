@@ -52,10 +52,13 @@ class Orchestrator:
         provider: LLMProvider,
         session: AsyncSession,
         *,
-        max_iterations: int = 2,
+        max_iterations: int | None = None,
     ) -> None:
         self._session = session
-        self._max_iterations = max_iterations
+        self._max_iterations = (
+            max_iterations if max_iterations is not None
+            else get_settings().pipeline_max_iterations
+        )
 
         self.architect = ArchitectAgent(provider)
         self.implementation = ImplementationAgent(provider)
@@ -110,11 +113,19 @@ class Orchestrator:
 
         # 3) Review fan-out + fix loop.
         for iteration in range(self._max_iterations):
+            # Run the three reviewers concurrently (the slow LLM part), but persist
+            # their steps sequentially — one AsyncSession can't commit concurrently.
             tests, security, optimization = await asyncio.gather(
-                self._step(run, self.test, ctx),
-                self._step(run, self.security, ctx),
-                self._step(run, self.optimization, ctx),
+                self._invoke(self.test, ctx),
+                self._invoke(self.security, ctx),
+                self._invoke(self.optimization, ctx),
             )
+            for agent, output in (
+                (self.test, tests),
+                (self.security, security),
+                (self.optimization, optimization),
+            ):
+                await self._persist_step(run, agent, output)
             ctx.tests, ctx.security, ctx.optimization = tests, security, optimization
 
             # Actually execute the generated tests — real signal, not self-report.
@@ -179,18 +190,25 @@ class Orchestrator:
         *,
         extra: str | None = None,
     ):
-        """Run one agent, persist an AgentStep, return its typed output."""
-        start = time.perf_counter()
+        """Run one agent and persist its step (sequential convenience wrapper)."""
+        output = await self._invoke(agent, ctx, extra=extra)
+        await self._persist_step(run, agent, output)
+        return output
+
+    async def _invoke(self, agent: BaseAgent, ctx: PipelineContext, *, extra: str | None = None):
+        """Run one agent's LLM call. No DB access — safe to call concurrently."""
         if extra:
             # Temporarily augment the agent's task with the fix brief.
             original = agent.build_task
             agent.build_task = lambda c, _o=original, _e=extra: _o(c) + "\n\n" + _e  # type: ignore
         try:
-            output = await agent.run(ctx)
+            return await agent.run(ctx)
         finally:
             if extra:
                 agent.build_task = original  # type: ignore
 
+    async def _persist_step(self, run: PipelineRun, agent: BaseAgent, output) -> None:
+        """Persist one agent's result. Call sequentially (single async session)."""
         self._seq += 1
         resp = agent.last_response
         step = AgentStep(
@@ -201,12 +219,11 @@ class Orchestrator:
             output=output.model_dump(),
             input_tokens=resp.input_tokens if resp else None,
             output_tokens=resp.output_tokens if resp else None,
-            duration_ms=int((time.perf_counter() - start) * 1000),
+            duration_ms=agent.last_duration_ms,
         )
         self._session.add(step)
         self._steps.append(step)
         await self._session.commit()
-        return output
 
     @staticmethod
     def _fix_brief(ctx: PipelineContext) -> str:

@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 from app.agents.orchestrator import Orchestrator
 from app.db.models import FeedbackVerdict, LearnedLesson, PipelineRun
 from app.db.session import get_session
-from app.llm import get_llm_provider
+from app.llm import QuotaExceededError, get_llm_provider
 from app.schemas.pipeline import GenerationRequest, PipelineResult
 from app.services.learning import distill_lessons, record_feedback
 
@@ -29,7 +29,11 @@ async def generate(
 ) -> PipelineResult:
     """Run the full 5-agent pipeline synchronously and return the result."""
     orchestrator = Orchestrator(get_llm_provider(), session)
-    return await orchestrator.run(request)
+    try:
+        return await orchestrator.run(request)
+    except QuotaExceededError as exc:
+        # 429 so clients can distinguish "out of quota" from a real failure.
+        raise HTTPException(429, str(exc)) from exc
 
 
 @router.get("/runs")

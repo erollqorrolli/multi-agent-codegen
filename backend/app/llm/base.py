@@ -12,6 +12,14 @@ from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
 
+class QuotaExceededError(RuntimeError):
+    """Raised when the provider's quota is exhausted (e.g. free-tier daily cap).
+
+    Distinct from transient rate limits: retrying within the request won't help,
+    so callers should surface a clear message rather than hammering the API.
+    """
+
+
 class ModelTier(enum.StrEnum):
     """Logical model classes. Mapped to concrete model IDs by each provider.
 

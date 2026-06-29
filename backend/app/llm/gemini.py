@@ -23,14 +23,31 @@ from tenacity import (
     wait_exponential,
 )
 
-from app.llm.base import LLMProvider, LLMResponse, ModelTier
+from app.llm.base import LLMProvider, LLMResponse, ModelTier, QuotaExceededError
 
 logger = logging.getLogger(__name__)
 
 
-def _is_rate_limit(exc: BaseException) -> bool:
-    """Retry only on 429 / resource-exhausted — not on bad requests."""
-    return isinstance(exc, APIError) and getattr(exc, "code", None) in (429, 503)
+def _is_daily_quota(exc: BaseException) -> bool:
+    """A *per-day* quota cap — retrying within the request is pointless."""
+    return isinstance(exc, APIError) and "PerDay" in str(exc)
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    """Retry transient 429/503 (per-minute limits), but NOT a daily quota cap."""
+    return (
+        isinstance(exc, APIError)
+        and getattr(exc, "code", None) in (429, 503)
+        and not _is_daily_quota(exc)
+    )
+
+
+def _quota_message(exc: BaseException) -> str:
+    return (
+        "Gemini quota exhausted (likely the free-tier daily request limit). "
+        "It resets at midnight US Pacific. To continue now, create a new API key in a "
+        "fresh Google AI Studio project (new project = fresh quota), or use a paid plan."
+    )
 
 
 class GeminiProvider(LLMProvider):
@@ -60,13 +77,38 @@ class GeminiProvider(LLMProvider):
     def _model_for(self, tier: ModelTier) -> str:
         return self._models[tier]
 
+    async def generate(
+        self,
+        *,
+        prompt: str,
+        system: str | None = None,
+        tier: ModelTier = ModelTier.FAST,
+        json_output: bool = False,
+        thinking_budget: int | None = None,
+        temperature: float = 0.7,
+    ) -> LLMResponse:
+        """Public entrypoint: retries transient limits, surfaces quota clearly."""
+        try:
+            return await self._generate_once(
+                prompt=prompt,
+                system=system,
+                tier=tier,
+                json_output=json_output,
+                thinking_budget=thinking_budget,
+                temperature=temperature,
+            )
+        except APIError as exc:
+            if getattr(exc, "code", None) == 429:
+                raise QuotaExceededError(_quota_message(exc)) from exc
+            raise
+
     @retry(
-        retry=retry_if_exception(_is_rate_limit),
+        retry=retry_if_exception(_is_retryable),
         wait=wait_exponential(multiplier=2, min=2, max=60),
         stop=stop_after_attempt(5),
         reraise=True,
     )
-    async def generate(
+    async def _generate_once(
         self,
         *,
         prompt: str,

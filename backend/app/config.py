@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     # Generated projects are large; a low cap truncates the JSON mid-file.
     llm_max_output_tokens: int = 32768
 
+    # --- Pipeline ---
+    # Max architect→fix-loop passes. Each iteration adds ~4 LLM calls, so keep
+    # this low on the free tier (20 requests/day). Raise it with a paid plan.
+    pipeline_max_iterations: int = 2
+
     # --- Sandbox (test execution) ---
     sandbox_enabled: bool = True
     sandbox_backend: str = "auto"  # auto | docker | local

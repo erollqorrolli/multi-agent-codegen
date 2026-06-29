@@ -15,7 +15,7 @@ import sys
 
 from app.agents.orchestrator import Orchestrator
 from app.db.session import SessionLocal, init_models
-from app.llm import get_llm_provider
+from app.llm import QuotaExceededError, get_llm_provider
 from app.schemas.pipeline import GenerationRequest
 
 
@@ -28,7 +28,11 @@ async def main(title: str, body: str) -> None:
     async with SessionLocal() as session:
         orchestrator = Orchestrator(get_llm_provider(), session)
         print(f"\033[1mRequest:\033[0m {title}\nRunning 5-agent pipeline...\n")
-        result = await orchestrator.run(GenerationRequest(issue_title=title, issue_body=body))
+        try:
+            result = await orchestrator.run(GenerationRequest(issue_title=title, issue_body=body))
+        except QuotaExceededError as exc:
+            print(f"\033[93m\nQuota:\033[0m {exc}")
+            raise SystemExit(2) from exc
 
     _hr("ARCHITECTURE")
     print("Stack:", ", ".join(result.architecture.tech_stack))
