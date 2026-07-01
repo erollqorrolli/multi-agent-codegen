@@ -132,7 +132,13 @@ class Orchestrator:
             ctx.test_execution = await self._run_sandbox(run, ctx)
             tests_ok = ctx.test_execution.passed if ctx.test_execution else tests.validated
 
-            if security.passed and tests_ok:
+            # Only high/critical findings should block — an INFO note shouldn't burn
+            # a fix-loop iteration (nor should we trust the model's `passed` flag).
+            security_ok = not any(
+                f.severity in ("critical", "high") for f in security.findings
+            )
+
+            if security_ok and tests_ok:
                 break  # converged
             if iteration == self._max_iterations - 1:
                 break  # out of budget; ship with findings noted in the PR
