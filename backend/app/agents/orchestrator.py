@@ -36,7 +36,7 @@ from app.agents.security import SecurityAgent
 from app.agents.test_agent import TestAgent
 from app.config import get_settings
 from app.db.models import AgentStep, PipelineRun, RunStatus
-from app.llm.base import LLMProvider
+from app.llm.base import LLMProvider, QuotaExceededError
 from app.sandbox import get_sandbox
 from app.sandbox.base import SandboxResult
 from app.schemas.pipeline import GenerationRequest, PipelineResult
@@ -94,7 +94,11 @@ class Orchestrator:
             await self._session.commit()
             return result
         except Exception as exc:  # noqa: BLE001 — record and re-raise
-            logger.exception("Pipeline run %s failed", run.id)
+            # Quota is an expected condition, not a defect — log it concisely.
+            if isinstance(exc, QuotaExceededError):
+                logger.warning("Pipeline run %s stopped: %s", run.id, exc)
+            else:
+                logger.exception("Pipeline run %s failed", run.id)
             run.status = RunStatus.FAILED
             run.error = str(exc)
             run.completed_at = datetime.now(timezone.utc)
