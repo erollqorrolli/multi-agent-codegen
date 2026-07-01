@@ -55,16 +55,28 @@ class BaseAgent(Generic[TOut]):
         task = self.build_task(ctx)
 
         start = time.perf_counter()
-        resp = await self._provider.generate(
-            prompt=task,
-            system=system,
-            tier=self.tier,
-            json_output=True,
-        )
-        self.last_duration_ms = int((time.perf_counter() - start) * 1000)
-        self.last_response = resp
-
-        return self._parse(resp.text)
+        last_exc: Exception | None = None
+        # One retry on malformed output: a single bad generation shouldn't kill a
+        # multi-minute pipeline run. Schema/parse failures are usually transient.
+        for attempt in range(2):
+            resp = await self._provider.generate(
+                prompt=task,
+                system=system,
+                tier=self.tier,
+                json_output=True,
+            )
+            self.last_duration_ms = int((time.perf_counter() - start) * 1000)
+            self.last_response = resp
+            try:
+                return self._parse(resp.text)
+            except (json.JSONDecodeError, AgentError) as exc:
+                last_exc = exc
+                logger.warning(
+                    "%s produced unparseable output (attempt %d), retrying once",
+                    self.name,
+                    attempt + 1,
+                )
+        raise AgentError(f"{self.name} returned unparseable output twice") from last_exc
 
     # --- helpers --------------------------------------------------------------
     def _assemble_system(self, ctx: PipelineContext) -> str:
@@ -97,10 +109,12 @@ def _extract_json(text: str) -> dict:
     if text.startswith("```"):
         text = text.split("```", 2)[1]
         text = text.removeprefix("json").strip()
+    # strict=False tolerates raw control characters (literal newlines/tabs) inside
+    # JSON strings — a common LLM output quirk that the strict parser rejects.
     try:
-        return json.loads(text)
+        return json.loads(text, strict=False)
     except json.JSONDecodeError:
         first, last = text.find("{"), text.rfind("}")
         if first != -1 and last != -1 and last > first:
-            return json.loads(text[first : last + 1])
+            return json.loads(text[first : last + 1], strict=False)
         raise
